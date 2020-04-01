@@ -9,6 +9,7 @@ import math
 import numpy as np
 from skopt import gp_minimize
 from skopt.plots import plot_convergence
+from mpl_toolkits.mplot3d import Axes3D
 
 '''
 define common trig functions and values for ease of use
@@ -64,3 +65,33 @@ def appxArea(r,t,canvas,N=100,plot=False,x=None,y=None):
         truth = p.contains_points(c)
         c = [c[i] for i in range(len(c)) if truth[i]]
     return(len(c)*(15.0/float(areaC)),c)
+
+def bayesFunc(x,N=100):
+    #x0 is r, x1 is t
+    (canvas,who,cares) = createCanvas(N)
+    (out,whocares) = appxArea(x[0],x[1],canvas)
+    return(-1*out)
+
+def canvas2plot(canvas):
+    x = [i[0] for i in canvas]
+    y = [i[1] for i in canvas]
+    plt.axes().set_aspect('equal', 'datalim')
+    plt.scatter(x,y,s=.008,marker='x')
+    plt.axes().set_aspect('equal', 'datalim')
+    plt.savefig('Sofa.png',dpi=500)
+    
+if __name__ == '__main__':
+     #test out functions with Hammersly's sofa
+    (canvas,x,y) = createCanvas(50)
+    print("The Approximation of Hamersley's Sofa Area",appxArea(.5,.5,canvas)[0])
+    
+    #Graph the error in the function
+    realSol = pi/2+2/pi
+    canvasN = range(100,1500,100)
+    data = []
+    for N in canvasN:
+        (canvas,x,y) = createCanvas(N)
+        data.append(abs(appxArea(.5,.5,canvas)[0]-realSol))
+    plt.plot(canvasN,data)
+    plt.savefig('Sofa_Error_Plot.png',dpi=500)
+    plt.close('all')
