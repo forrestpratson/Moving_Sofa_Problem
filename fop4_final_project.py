@@ -95,3 +95,34 @@ if __name__ == '__main__':
     plt.plot(canvasN,data)
     plt.savefig('Sofa_Error_Plot.png',dpi=500)
     plt.close('all')
+    
+    #Use Bayesian Optimization to find max area and plot converges
+    res = gp_minimize(bayesFunc,                  # the function to minimize
+                      [(0.0, 1.0),(0,1.0)],      # the bounds on each dimension of x
+                      acq_func="EI",      # the acquisition function
+                      n_calls=100,         # the number of evaluations of f
+                      n_random_starts=5,  # the number of random initialization points
+                      random_state=123)   # the random seed
+    plot_convergence(res)
+    plt.savefig('Converence_Plot.png',dpi=500)
+    plt.close('all')
+    
+    #Plot Sofa figure from Bayesian Optimization
+    (canvas,x,y) = createCanvas(500)
+    (area,c) =appxArea(res.x[0],res.x[1],canvas)
+    canvas2plot(c)
+    plt.close('all')
+    
+    #Plot contour plot of values
+    (canvas,x,y) = createCanvas(100)
+    x = y = np.arange(0, 1.4, 0.1)
+    X, Y = np.meshgrid(x, y)
+    zs = []
+    for i in range(len(np.ravel(X))):
+        zs.append(appxArea(np.ravel(X)[i],np.ravel(Y)[i],canvas)[0])
+    zs = np.array(zs)
+    Z = zs.reshape(X.shape)
+    plt.contourf(X, Y, Z,15)
+    plt.colorbar();
+    plt.savefig('Contour_Plot.png',dpi=1000)
+    plt.close('all')
