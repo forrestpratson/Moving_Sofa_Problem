@@ -7,9 +7,15 @@ from matplotlib import path
 import matplotlib.pyplot as plt
 import math
 import numpy as np
-from skopt import gp_minimize
-from skopt.plots import plot_convergence
-from mpl_toolkits.mplot3d import Axes3D
+from numpy import argmax
+from numpy import asarray
+from numpy.random import normal
+from numpy.random import random
+from scipy.stats import norm
+from sklearn.gaussian_process import GaussianProcessRegressor
+from warnings import catch_warnings
+from warnings import simplefilter
+from matplotlib import pyplot
 
 '''
 define common trig functions and values for ease of use
@@ -70,7 +76,7 @@ def bayesFunc(x,N=100):
     #x0 is r, x1 is t
     (canvas,who,cares) = createCanvas(N)
     (out,whocares) = appxArea(x[0],x[1],canvas)
-    return(-1*out)
+    return(out)
 
 def canvas2plot(canvas):
     x = [i[0] for i in canvas]
@@ -78,7 +84,83 @@ def canvas2plot(canvas):
     plt.axes().set_aspect('equal', 'datalim')
     plt.scatter(x,y,s=.008,marker='x')
     plt.axes().set_aspect('equal', 'datalim')
+    plt.title('Maximum Sofa Area Shape')
     plt.savefig('Sofa.png',dpi=500)
+
+# surrogate or approximation for the objective function
+def surrogate(model, X):
+    with catch_warnings():
+        simplefilter("ignore")
+        return model.predict(X, return_std=True)    
+    
+def acquisition(X, Xsamples, model):
+    # calculate the best surrogate score found so far
+    yhat, _ = surrogate(model, X)
+    best = max(yhat)
+    # calculate mean and stdev via surrogate function
+    mu, std = surrogate(model, Xsamples)
+    mu = mu[:, 0]
+    # calculate the probability of improvement
+    probs = norm.cdf((mu - best) / (std+1E-9))
+    return probs
+
+def opt_acquisition(X, y, model):
+    # random search, generate random samples
+    Xsamples = random(20000)
+    Xsamples = Xsamples.reshape(10000, 2)
+    # calculate the acquisition function for each sample
+    scores = acquisition(X, Xsamples, model)
+    # locate the index of the largest scores
+    ix = np.argmax(scores)
+    return [Xsamples[ix, 0],Xsamples[ix, 1]]
+
+def bayesOpt2D(func,rng,num_it,init_num):
+    low1 = rng[0][0]
+    high1 = rng[0][1]
+    r1 = high1-low1
+    low2 = rng[1][0]
+    high2 = rng[1][1]
+    r2 = high2-low2
+    X = np.asarray([[(random()+low1)*r1,(random()+low2)*r2] for i in range(init_num)])
+    y = np.asarray([func(x) for x in X])
+    X = X.reshape(len(X),2)
+    y = y.reshape(len(y),1)
+    model = GaussianProcessRegressor()
+    model.fit(X,y)
+    for i in range(num_it):
+        x = opt_acquisition(X,y,model)
+        actual = func(x)
+        est,_ = surrogate(model , [x])
+        X = np.vstack((X,[x]))
+        y = np.vstack((y,[[actual]]))
+        model.fit(X,y)
+    allTrys = X
+    maxVal = func(X[-1])
+    paramVal = X[-1]
+    return(maxVal,paramVal,allTrys)
+
+def convergencePlot(func,params):
+    nums = range(1,len(params)+1)
+    maxVal = func(params[0])
+    y = []
+    x = []
+    count = 0
+    for i in params:
+        count += 1
+        val = func(i)
+        if val > maxVal:
+            x.append(count)
+            x.append(count)
+            y.append(maxVal)
+            y.append(val)
+            maxVal = val
+    plt.xlabel('Number of Iterations')
+    plt.ylabel('Best Value')
+    plt.title('Convergence Plot')
+    plt.plot(x,y,'bo-')
+    plt.savefig('Convergence_Plot.png',dpi=500)
+    plt.close('all')
+    
     
 if __name__ == '__main__':
      #test out functions with Hammersly's sofa
@@ -93,27 +175,22 @@ if __name__ == '__main__':
         (canvas,x,y) = createCanvas(N)
         data.append(abs(appxArea(.5,.5,canvas)[0]-realSol))
     plt.plot(canvasN,data)
+    plt.title('Error in Area Calculation vs Canvas Size')
     plt.savefig('Sofa_Error_Plot.png',dpi=500)
     plt.close('all')
     
     #Use Bayesian Optimization to find max area and plot converges
-    res = gp_minimize(bayesFunc,                  # the function to minimize
-                      [(0.0, 1.0),(0,1.0)],      # the bounds on each dimension of x
-                      acq_func="EI",      # the acquisition function
-                      n_calls=100,         # the number of evaluations of f
-                      n_random_starts=5,  # the number of random initialization points
-                      random_state=123)   # the random seed
-    plot_convergence(res)
-    plt.savefig('Converence_Plot.png',dpi=500)
-    plt.close('all')
+    params = bayesOpt2D(bayesFunc,[(0,1),(0,1)],150,5)
+    print('The maximum area found was:',params[0])
+    convergencePlot(bayesFunc,params[-1])
     
     #Plot Sofa figure from Bayesian Optimization
     (canvas,x,y) = createCanvas(500)
-    (area,c) =appxArea(res.x[0],res.x[1],canvas)
+    (area,c) =appxArea(params[1][0],params[1][1],canvas)
     canvas2plot(c)
     plt.close('all')
     
-    #Plot contour plot of values
+    #Plot 3d plot of values
     (canvas,x,y) = createCanvas(100)
     x = y = np.arange(0, 1.4, 0.1)
     X, Y = np.meshgrid(x, y)
@@ -124,5 +201,8 @@ if __name__ == '__main__':
     Z = zs.reshape(X.shape)
     plt.contourf(X, Y, Z,15)
     plt.colorbar();
+    plt.title('Contour Plot of Sofa Area')
+    plt.xlabel('r Value')
+    plt.ylabel('t Value')
     plt.savefig('Contour_Plot.png',dpi=1000)
     plt.close('all')
